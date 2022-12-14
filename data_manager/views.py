@@ -1,46 +1,59 @@
-from django.shortcuts import render
-from django.views.generic.edit import CreateView, UpdateView, DeleteView
+from django.shortcuts import redirect
 from django.urls import reverse_lazy
+from django.views.generic.edit import CreateView, UpdateView, DeleteView
+from django.views.generic import ListView
 from data_manager.models import Events
 from django.views import View
-from django.http import HttpResponse,JsonResponse
+from django.http import JsonResponse
 import io,csv
-
-# Create your views here.
+from django.contrib.auth.mixins import LoginRequiredMixin
+from django.views import View
+from .forms import CreateEventForm
+from .models import Countries
 class EventCreate(CreateView):
     model = Events
     fields = '__all__'
-    # initial = {'date_of_death': '11/06/2020'}
+    success_url = reverse_lazy('/event')
+   
 
 class EventUpdate(UpdateView):
     model = Events
-    fields = '__all__' # Not recommended (potential security issue if more fields added)
+    fields = '__all__' 
 
 class EventDelete(DeleteView):
     model = Events
-    # success_url = reverse_lazy('authors')
-
 class BulkEventCreate(View):
-    def post(self, request):
-        user = request.user #get the current login user details
-        paramFile = io.TextIOWrapper(request.FILES['employeefile'].file)
+    def post(self, request, *args, **kwargs):
+        paramFile = io.TextIOWrapper(request.FILES['bulkcreatfile'].file)
         portfolio1 = csv.DictReader(paramFile)
         list_of_dict = list(portfolio1)
-        objs = [
-                Events(
-                country=row['first_name'],
-                title=row['title'],
-                date=row['date'],
-                notes=row['notes'],
-                bunting=True if row['bunting'] else False         
-            )
-            for row in list_of_dict
-        ]
         try:
-            msg = Events.objects.bulk_create(objs)
-            returnmsg = {"status_code": 200}
+            objs = [
+                    Events(
+                    country= Countries.objects.get(name=row["country"]),
+                    title=row['title'],
+                    date=row['date'],
+                    notes=row['notes'],
+                    bunting=True if row['bunting'] else False         
+                )
+                for row in list_of_dict
+            ]
+        except:
+            print('imported successfully')
+        try:
+            Events.objects.bulk_create(objs)
             print('imported successfully')
         except Exception as e:
             print('Error While Importing Data: ',e)
             returnmsg = {"status_code": 500}       
-        return JsonResponse(returnmsg)
+        return redirect("/event")
+
+class InventoryListView(LoginRequiredMixin, ListView):
+    model = Events
+    fields = "__all__"
+    template_name = "home.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["event_form"] = CreateEventForm
+        return context
